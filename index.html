@@ -807,7 +807,11 @@ function renderSettings(){
   const asType=document.getElementById('asType');asType.innerHTML='';APP.tyypit.forEach(t=>{const s=document.createElement('span');s.className='tag';s.innerHTML=`${t.nimi}<button onclick="delType('${t.id}')">×</button>`;asType.appendChild(s);});
   const asLAT=document.getElementById('asLAT');asLAT.innerHTML='';APP.laTypes.forEach(l=>{const s=document.createElement('span');s.className='tag';s.innerHTML=`${l.nimi}<button onclick="delLAT('${l.id}')">×</button>`;asLAT.appendChild(s);});
   const asU=document.getElementById('asUsers');asU.innerHTML='';
-  if(APP.user?.role==='admin'){document.getElementById('userCard').style.display='';APP.users.forEach(u=>{const d=document.createElement('div');d.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f0ee;font-size:12px';d.innerHTML=`<span>${u.name} <span style="color:#888">(${u.role})</span></span>${APP.users.length>1?`<button class="btn btn-sm btn-danger" onclick="delUser('${u.id}')">🗑</button>`:''}`;asU.appendChild(d);});}
+  if(APP.user?.role==='admin'){document.getElementById('userCard').style.display='';APP.users.forEach(u=>{const d=document.createElement('div');d.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f0ee;font-size:12px';d.innerHTML=`<span>${u.name} <span style="color:#888">(${u.role})</span></span>
+  <div style="display:flex;gap:4px">
+    <button class="btn btn-sm" onclick="openEditUser('${u.id}','${u.name}','${u.login}','${u.role}')">✏️</button>
+    ${APP.users.length>1?`<button class="btn btn-sm btn-danger" onclick="delUser('${u.id}')">🗑</button>`:''}
+  </div>`;asU.appendChild(d);});}
   else{document.getElementById('userCard').style.display='none';}
   renderClientList();
 }
@@ -824,6 +828,40 @@ async function delType(id){if(!confirm('Poistetaanko?'))return;await api('projek
 async function addLAT(){const v=document.getElementById('newLAT').value.trim();if(!v)return;await api('loppuasiakastyypit',{method:'POST',data:{nimi:v}});document.getElementById('newLAT').value='';APP.laTypes=(await api('loppuasiakastyypit?order=nimi')).data;renderSettings();}
 async function delLAT(id){if(!confirm('Poistetaanko?'))return;await api('loppuasiakastyypit?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'});APP.laTypes=APP.laTypes.filter(x=>x.id!==id);renderSettings();}
 async function addUser(){const n=document.getElementById('nuName').value.trim(),l=document.getElementById('nuLogin').value.trim(),p=document.getElementById('nuPass').value.trim(),r=document.getElementById('nuRole').value;if(!n||!l||!p){alert('Täytä kaikki kentät');return;}await api('lt_users',{method:'POST',data:{name:n,login:l,password:p,role:r}});['nuName','nuLogin','nuPass'].forEach(id=>document.getElementById(id).value='');APP.users=(await api('lt_users?order=name&select=id,name,login,role')).data;renderSettings();}
+function openEditUser(id, name, login, role){
+  document.getElementById('eu_id').value = id;
+  document.getElementById('eu_name').value = name;
+  document.getElementById('eu_login').value = login;
+  document.getElementById('eu_role').value = role;
+  document.getElementById('eu_pass').value = '';
+  document.getElementById('mEditUserErr').classList.add('hidden');
+  document.getElementById('mEditUser').classList.remove('hidden');
+}
+
+async function saveEditUser(){
+  const id = document.getElementById('eu_id').value;
+  const name = document.getElementById('eu_name').value.trim();
+  const login = document.getElementById('eu_login').value.trim();
+  const role = document.getElementById('eu_role').value;
+  const pass = document.getElementById('eu_pass').value.trim();
+  const errEl = document.getElementById('mEditUserErr');
+
+  if(!name || !login){ errEl.textContent='Nimi ja käyttäjätunnus ovat pakollisia'; errEl.classList.remove('hidden'); return; }
+
+  const data = {name, login, role};
+  if(pass) data.password = pass;
+
+  try{
+    await api('lt_users?id=eq.'+id, {method:'PATCH', data});
+    APP.users = (await api('lt_users?order=name&select=id,name,login,role')).data;
+    closeModal('mEditUser');
+    renderSettings();
+  } catch(e){
+    errEl.textContent = 'Virhe: '+(e.response?.data?.message||e.message);
+    errEl.classList.remove('hidden');
+  }
+}
+
 async function delUser(id){if(!confirm('Poistetaanko käyttäjä?'))return;await api('lt_users?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'});APP.users=APP.users.filter(x=>x.id!==id);renderSettings();}
 
 let editClientId=null;
@@ -838,5 +876,29 @@ document.getElementById('cfgUrl').value=CFG.url;
 document.getElementById('cfgKey').value=CFG.key;
 testConnection();
 </script>
+<!-- USER EDIT MODAL -->
+<div id="mEditUser" class="modal-overlay hidden">
+<div class="modal" style="max-width:400px">
+  <div class="mhdr"><h3>Muokkaa käyttäjää</h3><button class="btn btn-sm" onclick="closeModal('mEditUser')">✕</button></div>
+  <div id="mEditUserErr" class="err hidden"></div>
+  <input type="hidden" id="eu_id" />
+  <div class="field"><label>Koko nimi</label><input id="eu_name" /></div>
+  <div class="field"><label>Käyttäjätunnus</label><input id="eu_login" /></div>
+  <div class="field"><label>Rooli</label>
+    <select id="eu_role">
+      <option value="suunnittelija">Suunnittelija</option>
+      <option value="admin">Pääkäyttäjä</option>
+    </select>
+  </div>
+  <div class="field"><label>Uusi salasana <span style="color:#888;font-size:11px">(jätä tyhjäksi jos ei muutosta)</span></label>
+    <input id="eu_pass" type="password" placeholder="••••••••" />
+  </div>
+  <div class="mftr">
+    <button class="btn" onclick="closeModal('mEditUser')">Peruuta</button>
+    <button class="btn btn-primary" onclick="saveEditUser()">Tallenna</button>
+  </div>
+</div>
+</div>
+
 </body>
 </html>
