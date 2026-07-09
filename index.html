@@ -626,7 +626,7 @@ function searchAndShowHours(){
   list.forEach(h=>{
     const p=APP.projects.find(x=>x.id===h.projekti_id);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${h.paivamaara||'—'}</td><td style="font-size:12px">${cliName(p?.asiakas_id||'')}</td><td style="font-size:12px">${p?.projektinumero||''} ${p?.nimi||'—'}</td><td style="font-size:12px">${h.vaihe}</td><td style="font-size:12px">${usrName(h.kayttaja_id)}</td><td style="font-size:12px;font-weight:500">${parseFloat(h.tunnit).toFixed(1)} h</td><td style="color:#888;font-size:12px">${h.kuvaus||''}</td><td><button class="btn btn-sm btn-danger" onclick="deleteHour('${h.id}')">🗑</button></td>`;
+    tr.innerHTML=`<td>${h.paivamaara||'—'}</td><td style="font-size:12px">${cliName(p?.asiakas_id||'')}</td><td style="font-size:12px">${p?.projektinumero||''} ${p?.nimi||'—'}</td><td style="font-size:12px">${h.vaihe}</td><td style="font-size:12px">${usrName(h.kayttaja_id)}</td><td style="font-size:12px;font-weight:500">${parseFloat(h.tunnit).toFixed(1)} h</td><td style="color:#888;font-size:12px">${h.kuvaus||''}</td><td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditHour('${h.id}')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteHour('${h.id}')">🗑</button></td>`;
     tb.appendChild(tr);
   });
   // Näytä yhteistunnit
@@ -676,8 +676,72 @@ function renderHours(){
   });
   const tb=document.getElementById('hoursTbody');tb.innerHTML='';
   if(!list.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:#888">Ei kirjauksia.</td></tr>';return;}
-  list.forEach(h=>{const p=APP.projects.find(x=>x.id===h.projekti_id);const tr=document.createElement('tr');tr.innerHTML=`<td>${h.paivamaara}</td><td>${p?.nimi||'—'}</td><td>${h.vaihe}</td><td>${usrName(h.kayttaja_id)}</td><td>${parseFloat(h.tunnit).toFixed(1)} h</td><td style="color:#888">${h.kuvaus||''}</td><td><button class="btn btn-sm btn-danger" onclick="deleteHour('${h.id}')">🗑</button></td>`;tb.appendChild(tr);});
+  list.forEach(h=>{const p=APP.projects.find(x=>x.id===h.projekti_id);const tr=document.createElement('tr');tr.innerHTML=`<td>${h.paivamaara}</td><td>${p?.nimi||'—'}</td><td>${h.vaihe}</td><td>${usrName(h.kayttaja_id)}</td><td>${parseFloat(h.tunnit).toFixed(1)} h</td><td style="color:#888">${h.kuvaus||''}</td><td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openEditHour('${h.id}')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteHour('${h.id}')">🗑</button></td>`;tb.appendChild(tr);});
 }
+function openEditHour(id){
+  const h=APP.hours.find(x=>x.id===id);
+  if(!h)return;
+  const p=APP.projects.find(x=>x.id===h.projekti_id);
+
+  document.getElementById('eh_id').value=id;
+  document.getElementById('eh_proj_name').value=(p?.projektinumero||'')+' '+( p?.nimi||'—');
+  document.getElementById('eh_phase').value=h.vaihe||'';
+  document.getElementById('eh_date').value=h.paivamaara||'';
+  document.getElementById('eh_hrs').value=h.tunnit||'';
+  document.getElementById('eh_note').value=h.kuvaus||'';
+
+  // Täytä vaihe-ehdotukset projektin vaiheista
+  const dl=document.getElementById('eh_phase_list');
+  dl.innerHTML='';
+  (p?.vaiheet||[]).forEach(v=>{const o=document.createElement('option');o.value=v;dl.appendChild(o);});
+
+  // Täytä suunnittelija-valinta
+  const sel=document.getElementById('eh_user');
+  sel.innerHTML='';
+  APP.users.forEach(u=>{
+    const o=document.createElement('option');
+    o.value=u.id;o.textContent=u.name;
+    if(u.id===h.kayttaja_id)o.selected=true;
+    sel.appendChild(o);
+  });
+
+  document.getElementById('mEditHourErr').classList.add('hidden');
+  document.getElementById('mEditHour').classList.remove('hidden');
+}
+
+async function saveEditHour(){
+  const id=document.getElementById('eh_id').value;
+  const vaihe=document.getElementById('eh_phase').value.trim();
+  const pvm=document.getElementById('eh_date').value;
+  const tunnit=parseFloat(document.getElementById('eh_hrs').value);
+  const uid=document.getElementById('eh_user').value;
+  const kuvaus=document.getElementById('eh_note').value.trim();
+  const errEl=document.getElementById('mEditHourErr');
+
+  if(!vaihe||!pvm||isNaN(tunnit)||tunnit<=0){
+    errEl.textContent='Täytä kaikki pakolliset kentät';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  try{
+    await api('tuntikirjaukset?id=eq.'+id,{method:'PATCH',data:{
+      vaihe,paivamaara:pvm,tunnit,kayttaja_id:uid,kuvaus:kuvaus||null
+    }});
+    // Päivitä paikallinen data
+    const idx=APP.hours.findIndex(x=>x.id===id);
+    if(idx>=0){
+      APP.hours[idx]={...APP.hours[idx],vaihe,paivamaara:pvm,tunnit,kayttaja_id:uid,kuvaus};
+    }
+    closeModal('mEditHour');
+    searchAndShowHours();
+    renderProj();
+  }catch(e){
+    errEl.textContent='Virhe: '+(e.response?.data?.message||e.message);
+    errEl.classList.remove('hidden');
+  }
+}
+
 async function deleteHour(id){if(!confirm('Poistetaanko kirjaus?'))return;await api('tuntikirjaukset?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'});APP.hours=APP.hours.filter(x=>x.id!==id);searchAndShowHours();renderProj();}
 
 function renderRep(){
@@ -872,6 +936,30 @@ document.getElementById('cfgUrl').value=CFG.url;
 document.getElementById('cfgKey').value=CFG.key;
 testConnection();
 </script>
+<!-- HOUR EDIT MODAL -->
+<div id="mEditHour" class="modal-overlay hidden">
+<div class="modal" style="max-width:420px">
+  <div class="mhdr"><h3>Muokkaa tuntikirjausta</h3><button class="btn btn-sm" onclick="closeModal('mEditHour')">✕</button></div>
+  <div id="mEditHourErr" class="err hidden"></div>
+  <input type="hidden" id="eh_id" />
+  <div class="field"><label>Projekti</label><input id="eh_proj_name" disabled style="background:#f5f5f3;color:#888" /></div>
+  <div class="field"><label>Vaihe *</label>
+    <input id="eh_phase" list="eh_phase_list" style="width:100%;padding:7px 10px;border:1px solid #d8d8d4;border-radius:8px;font-size:13px" />
+    <datalist id="eh_phase_list"></datalist>
+  </div>
+  <div class="g2">
+    <div class="field"><label>Suunnittelija</label><select id="eh_user"></select></div>
+    <div class="field"><label>Päivämäärä *</label><input id="eh_date" type="date" /></div>
+  </div>
+  <div class="field"><label>Tunnit *</label><input id="eh_hrs" type="number" min="0.5" step="0.5" /></div>
+  <div class="field"><label>Kuvaus</label><textarea id="eh_note" rows="2"></textarea></div>
+  <div class="mftr">
+    <button class="btn" onclick="closeModal('mEditHour')">Peruuta</button>
+    <button class="btn btn-primary" onclick="saveEditHour()">Tallenna</button>
+  </div>
+</div>
+</div>
+
 <!-- USER EDIT MODAL -->
 <div id="mEditUser" class="modal-overlay hidden">
 <div class="modal" style="max-width:400px">
