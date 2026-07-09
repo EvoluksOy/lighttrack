@@ -167,7 +167,7 @@ tr:hover td{background:#fafaf8}
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto">
         <table><thead><tr>
-          <th>Nro</th><th>Meidän asiakas</th><th>Projekti</th><th>Kategoria</th><th>LA-tyyppi</th><th>Suunnittelija</th><th>Status</th><th>Tunnit</th><th>Toiminnot</th>
+          <th>Nro</th><th>Meidän asiakas</th><th>Projekti</th><th>Kategoria</th><th>LA-tyyppi</th><th>Suunnittelija</th><th>Aloitettu</th><th>Viim. kirjaus</th><th>Status</th><th>Tunnit</th><th>Toiminnot</th>
         </tr></thead><tbody id="projTbody"></tbody></table>
       </div>
     </div>
@@ -507,6 +507,13 @@ function katName(id){return APP.kategoriat.find(x=>x.id===id)?.nimi||'—'}
 function latName(id){return APP.laTypes.find(x=>x.id===id)?.nimi||'—'}
 function cliName(id){return APP.asiakkaat.find(x=>x.id===id)?.yritys||'—'}
 function usrName(id){return APP.users.find(x=>x.id===id)?.name||'—'}
+function lastEntry(projId){
+  const entries=APP.hours.filter(h=>h.projekti_id===projId);
+  if(!entries.length)return '—';
+  const latest=entries.reduce((a,b)=>(a.paivamaara||'')>(b.paivamaara||'')?a:b);
+  return latest.paivamaara?latest.paivamaara.slice(0,10):'—';
+}
+
 function projHours(id){return APP.hours.filter(h=>h.projekti_id===id).reduce((s,h)=>s+parseFloat(h.tunnit||0),0)}
 
 function renderProj(){
@@ -527,6 +534,8 @@ function renderProj(){
       <td style="font-size:12px">${katName(p.kategoria_id)}</td>
       <td style="font-size:12px">${latName(p.loppuasiakatyyppi_id)}</td>
       <td style="font-size:12px">${usrName(p.vastuusuunnittelija_id)}</td>
+      <td style="font-size:11px;color:#888;white-space:nowrap">${p.aloituspaiva?p.aloituspaiva.slice(0,10):'—'}</td>
+      <td style="font-size:11px;color:#888;white-space:nowrap">${lastEntry(p.id)}</td>
       <td><span class="badge ${sc}">${p.status}</span></td>
       <td style="font-size:12px">${h.toFixed(1)} h</td>
       <td><div class="row-actions">
